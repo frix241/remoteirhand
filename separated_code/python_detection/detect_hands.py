@@ -12,6 +12,7 @@ CAMERA_INDEX = 0
 # --- Serial Communication ---
 try:
     ser = serial.Serial(SERIAL_PORT, BAUD_RATE, timeout=1)
+    time.sleep(2)  # Wait for Arduino to reset
     print(f"Connected to {SERIAL_PORT}")
 except Exception as e:
     print(f"Warning: Could not connect to serial port {SERIAL_PORT}. Running in simulation mode.")
@@ -145,7 +146,7 @@ while cap.isOpened():
             if command_char and (time.time() - last_sent_time > SEND_COOLDOWN):
                 print(f"Detected: {gesture_name} -> Sending: {command_char}")
                 if ser:
-                    ser.write(command_char.encode())
+                    ser.write((command_char + '\n').encode())
                 last_sent_time = time.time()
                 
             # Display gesture name

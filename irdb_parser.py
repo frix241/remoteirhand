@@ -2,14 +2,14 @@ import os
 
 def parse_ir_file(file_path):
     """
-    Parses a Flipper Zero .ir file and returns a list of commands.
+    Analiza un archivo .ir de Flipper Zero y devuelve una lista de comandos.
     
     Args:
-        file_path (str): The path to the .ir file.
+        file_path (str): La ruta al archivo .ir.
         
     Returns:
-        list: A list of dictionaries, where each dictionary represents a command
-              and contains keys like 'name', 'type', 'protocol', 'address', 'command'.
+        list: Una lista de diccionarios, donde cada diccionario representa un comando
+              y contiene claves como 'name', 'type', 'protocol', 'address', 'command'.
     """
     commands = []
     current_command = {}

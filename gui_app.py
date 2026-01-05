@@ -15,12 +15,12 @@ from PyQt6.QtGui import QImage, QPixmap, QFileSystemModel, QFont, QPalette, QCol
 # Import the parser
 from irdb_parser import parse_ir_file
 
-# --- Configuration ---
+# --- Configuración ---
 SERIAL_PORT = '/dev/ttyUSB0'
 BAUD_RATE = 115200
 CAMERA_INDEX = 0
 
-# --- Modern Light Theme ---
+# --- Tema Claro ---
 LIGHT_STYLE = """
 QMainWindow {
     background-color: #f5f7fa;
@@ -146,7 +146,7 @@ QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
 }
 """
 
-# --- Gesture to Command Name Mapping ---
+# --- Mapeo de Gestos a Comandos ---
 GESTURE_TO_IR_NAMES = {
     "ENCENDIDO": ["Power", "power", "POWER", "On", "Off", "On/Off"],
     "SILENCIAR": ["Mute", "mute", "MUTE", "Silence", "A/V_Mute"],
@@ -157,8 +157,7 @@ GESTURE_TO_IR_NAMES = {
     "FUENTE": ["Source", "source", "SOURCE", "Input", "input", "INPUT", "Hdmi_1", "HDMI"]
 }
 
-# --- Gesture Logic ---
-# --- Advanced Gesture Logic ---
+# --- Lógica de Gestos ---
 mp_hands = mp.solutions.hands
 mp_drawing = mp.solutions.drawing_utils
 
@@ -167,8 +166,8 @@ def get_euclidean_distance(p1, p2):
 
 def is_finger_extended(landmarks, finger_tip_idx, finger_pip_idx, wrist_idx=0):
     """
-    Robust check: Finger is extended if Tip is further from Wrist than PIP is.
-    Works regardless of hand rotation.
+    Comprobación robusta: El dedo está extendido si la punta está más lejos de la muñeca que la articulación PIP.
+    Funciona independientemente de la rotación de la mano.
     """
     wrist = landmarks[wrist_idx]
     tip = landmarks[finger_tip_idx]
@@ -177,7 +176,7 @@ def is_finger_extended(landmarks, finger_tip_idx, finger_pip_idx, wrist_idx=0):
     return get_euclidean_distance(tip, wrist) > get_euclidean_distance(pip, wrist) * 1.1
 
 def count_fingers_robust(landmarks):
-    """Counts extended fingers (Index, Middle, Ring, Pinky) using distance logic."""
+    """Cuenta los dedos extendidos (Índice, Medio, Anular, Meñique) usando lógica de distancia."""
     # Tips: 8, 12, 16, 20. PIPs: 6, 10, 14, 18
     tips = [8, 12, 16, 20]
     pips = [6, 10, 14, 18]
@@ -190,74 +189,68 @@ def count_fingers_robust(landmarks):
 def get_gesture_robust(landmarks):
     import math
     
-    # 1. Analyze Fingers
+    # 1. Analizar Dedos
     fingers_up = count_fingers_robust(landmarks)
     
-    # 2. Analyze Thumb
-    # Thumb is tricky. We check if Tip is 'far' from the Index MCP (base of index finger)
-    # and if the angle suggests 'Up' or 'Down' relative to the hand.
+    # 2. Analizar Pulgar
+    # El pulgar es complicado. Comprobamos si la punta está 'lejos' de la base del índice (MCP)
+    # y si el ángulo sugiere 'Arriba' o 'Abajo' relativo a la mano.
     wrist = landmarks[0]
     thumb_tip = landmarks[4]
     thumb_ip = landmarks[3]
     index_mcp = landmarks[5]
     
-    # Thumb Extension Check
+    # Comprobación de Extensión del Pulgar
     thumb_extended = get_euclidean_distance(thumb_tip, index_mcp) > 0.15
     
-    # Total effective fingers
+    # Total de dedos efectivos
     total_fingers = fingers_up + (1 if thumb_extended else 0)
     
-    # --- Logic Tree ---
+    # --- Árbol de Lógica ---
+    # Detecta: Encendido (5), Mute (0), Vol+/- (Pulgar), Canal+/- (Índice), Fuente (3)
     
-    # 1. Open Palm (Power)
+    # 1. Palma Abierta (Encender)
     if total_fingers == 5:
         return "ENCENDIDO"
         
-    # 2. Fist / Thumb Gestures (0 fingers up)
+    # 2. Puño / Gestos con Pulgar (0 dedos arriba)
     if fingers_up == 0:
-        # Check Thumb Orientation
-        # Vector from Wrist to Thumb Tip
+        # Comprobar Orientación del Pulgar
+        # Vector desde Muñeca a Punta del Pulgar
         dy = thumb_tip.y - wrist.y
         dx = thumb_tip.x - wrist.x
         
-        # If thumb is extended significantly
+        # Si el pulgar está extendido significativamente
         if thumb_extended:
-            # Angle check: -90 is Up, +90 is Down (in image coords y increases downwards)
-            # But simpler: compare Y relative to other knuckles
+            # Comprobación de ángulo: -90 es Arriba, +90 es Abajo (en coords de imagen y aumenta hacia abajo)
+            # Pero más simple: comparar Y relativo a otros nudillos
             
-            # Thumb Up: Tip is significantly above IP and Index MCP
+            # Pulgar Arriba: La punta está significativamente arriba de IP y MCP del Índice
             if thumb_tip.y < thumb_ip.y and thumb_tip.y < index_mcp.y:
                 return "SUBIR VOLUMEN"
             
-            # Thumb Down: Tip is significantly below IP and Index MCP
+            # Pulgar Abajo: La punta está significativamente abajo de IP y MCP del Índice
             if thumb_tip.y > thumb_ip.y and thumb_tip.y > index_mcp.y:
                 return "BAJAR VOLUMEN"
                 
-        return "SILENCIAR" # Closed Fist
+        return "SILENCIAR" # Puño Cerrado
         
-    # 3. Pointing (1 finger: Index)
+    # 3. Apuntando (1 dedo: Índice)
     if fingers_up == 1 and is_finger_extended(landmarks, 8, 6):
-        # Check if it's pointing Left or Right
-        # We use X position of Tip vs PIP
+        # Comprobar si apunta a Izquierda o Derecha
         index_tip = landmarks[8]
         index_pip = landmarks[6]
         
-        # Threshold for horizontal pointing
+        # Umbral para apuntar horizontalmente
         if abs(index_tip.x - index_pip.x) > 0.05:
-            if index_tip.x < index_pip.x: # Left (on screen)
+            if index_tip.x < index_pip.x: # Izquierda (en pantalla)
                 return "CANAL ANTERIOR"
             else:
                 return "CANAL SIGUIENTE"
         
         # If vertical
-        return "CANAL SIGUIENTE" # Default to Next if just pointing up? Or maybe Source?
-        
-    # 4. Two Fingers (Peace Sign) -> Source?
-    # Original logic had 3 fingers for Source, let's stick to that or adapt.
-    # User asked for "better detection", let's map:
-    # 1 Finger -> Channel Next
-    # 2 Fingers -> Channel Prev
-    # 3 Fingers -> Source
+        # Apuntando verticalmente (por defecto Siguiente)
+        return "CANAL SIGUIENTE"
     
     if fingers_up == 2:
         return "CANAL ANTERIOR"
@@ -266,14 +259,14 @@ def get_gesture_robust(landmarks):
         return "FUENTE"
         
     if fingers_up == 4:
-        return "ENCENDIDO" # Alternative for 4 fingers
+        return "ENCENDIDO" # Alternativa para 4 dedos
 
     return "NINGUNO"
 
 from collections import deque
 import math
 
-# --- Video Thread ---
+# --- Hilo de Video ---
 class VideoThread(QThread):
     change_pixmap_signal = pyqtSignal(QImage)
     gesture_signal = pyqtSignal(str)
@@ -289,37 +282,54 @@ class VideoThread(QThread):
         self.RECONNECT_INTERVAL = 5.0
         self.send_serial_signal.connect(self.send_serial)
         
-        # Smoothing Buffer
-        self.gesture_buffer = deque(maxlen=7) # Store last 7 frames
-        self.try_connect()
+        self.gesture_buffer = deque(maxlen=7)
 
     def try_connect(self):
-        """Try to connect to serial port"""
+        """Intenta auto-descubrir y conectar al puerto serial"""
         if self.ser is not None:
             return True
-        try:
-            self.ser = serial.Serial(SERIAL_PORT, BAUD_RATE, timeout=1)
-            time.sleep(2)
-            print(f"Conectado a {SERIAL_PORT}")
-            self.connection_status_signal.emit(True)
-            return True
-        except Exception as e:
-            self.ser = None
-            self.connection_status_signal.emit(False)
-            return False
+            
+        import serial.tools.list_ports
+        ports = serial.tools.list_ports.comports()
+        
+        candidate_ports = [p.device for p in ports if 'USB' in p.description or 'ACM' in p.description or 'USB' in p.device or 'ACM' in p.device]
+        
+        if not candidate_ports:
+            candidate_ports = [p.device for p in ports]
+            
+        print(f"Buscando ESP32 en: {candidate_ports}")
+        
+        for port in candidate_ports:
+            try:
+                print(f"Intentando conectar a {port}...")
+                self.ser = serial.Serial(port, BAUD_RATE, timeout=1)
+                time.sleep(2) 
+                
+                
+                print(f"¡Conectado exitosamente a {port}!")
+                self.connection_status_signal.emit(True)
+                return True
+            except Exception as e:
+                print(f"Falló conexión a {port}: {e}")
+                if self.ser:
+                    self.ser.close()
+                self.ser = None
+        
+        self.connection_status_signal.emit(False)
+        return False
 
     @pyqtSlot(str)
     def send_serial(self, command):
         if self.ser:
             try:
                 self.ser.write(command.encode())
+                self.ser.flush() # Asegurar que se envía inmediatamente
             except Exception as e:
                 print(f"Error enviando serial: {e}")
 
     def run(self):
         cap = cv2.VideoCapture(CAMERA_INDEX)
         
-        # UPGRADED MODEL: Complexity 1 (Better accuracy)
         hands = mp_hands.Hands(
             model_complexity=1, 
             min_detection_confidence=0.8,
@@ -328,7 +338,10 @@ class VideoThread(QThread):
         )
         
         last_sent_time = 0
-        SEND_COOLDOWN = 0.8 # Slightly faster response
+        SEND_COOLDOWN = 0.8 # Respuesta ligeramente más rápida
+
+        # Intento de conexión inicial (en hilo, para no bloquear UI)
+        self.try_connect()
 
         while self._run_flag:
             success, image = cap.read()
@@ -349,29 +362,29 @@ class VideoThread(QThread):
                         hand_landmarks,
                         mp_hands.HAND_CONNECTIONS)
                     
-                    # Get raw gesture from geometry
+                    # Obtener gesto crudo de la geometría
                     current_gesture = get_gesture_robust(hand_landmarks.landmark)
             
-            # --- Smoothing / Debouncing ---
+            # --- Suavizado / Debouncing ---
             self.gesture_buffer.append(current_gesture)
             
-            # Find most common gesture in buffer
+            # Encontrar gesto más común en buffer
             from collections import Counter
             if len(self.gesture_buffer) == self.gesture_buffer.maxlen:
                 most_common, count = Counter(self.gesture_buffer).most_common(1)[0]
                 
-                # Confidence threshold: 5 out of 7 frames must match
+                # Umbral de confianza: 5 de 7 frames deben coincidir
                 if count >= 5:
                     display_gesture = most_common
                     
-                    # Only send if it's a valid command and cooldown passed
+                    # Solo enviar si es un comando válido y pasó el enfriamiento
                     if display_gesture != "NINGUNO" and (time.time() - last_sent_time > SEND_COOLDOWN):
                         self.gesture_signal.emit(display_gesture)
                         last_sent_time = time.time()
-                        # Clear buffer to prevent double triggering
+                        # Limpiar buffer para evitar doble disparo
                         self.gesture_buffer.clear()
 
-            # UI Overlay
+            # Superposición UI
             cv2.putText(image_rgb, f"Gesto: {display_gesture}", (10, 50), 
                         cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2, cv2.LINE_AA)
 
@@ -381,7 +394,7 @@ class VideoThread(QThread):
             p = convert_to_Qt_format.scaled(640, 480, Qt.AspectRatioMode.KeepAspectRatio)
             self.change_pixmap_signal.emit(p)
             
-            # Read ESP32 responses
+            # Leer respuestas ESP32
             if self.ser and self.ser.in_waiting > 0:
                 try:
                     response = self.ser.readline().decode('utf-8').strip()
@@ -391,7 +404,7 @@ class VideoThread(QThread):
                     self.ser = None
                     self.connection_status_signal.emit(False)
             
-            # Auto-reconnect
+            # Auto-reconectar
             if self.ser is None and (time.time() - self.last_reconnect_attempt > self.RECONNECT_INTERVAL):
                 self.last_reconnect_attempt = time.time()
                 self.try_connect()
@@ -404,32 +417,30 @@ class VideoThread(QThread):
         self._run_flag = False
         self.wait()
 
-# --- Main Window ---
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("Control IR por Gestos")
         self.resize(1300, 750)
         
-        # Store loaded IR commands
+        # Guardar comandos IR cargados
         self.ir_commands = {}
         
-        # All IR files for search
+        # Todos los archivos IR para búsqueda
         self.all_ir_files = []
-        self.scan_ir_files()
 
-        # Central Widget
+        # Widget Central
         central_widget = QWidget()
         self.setCentralWidget(central_widget)
         main_layout = QHBoxLayout(central_widget)
         main_layout.setContentsMargins(15, 15, 15, 15)
         main_layout.setSpacing(15)
 
-        # Splitter for resizable areas
+        # Separadores para áreas redimensionables
         splitter = QSplitter(Qt.Orientation.Horizontal)
         main_layout.addWidget(splitter)
 
-        # --- Left Side: Search and File List ---
+        # --- Lado Izquierdo: Búsqueda y Lista de Archivos ---
         file_browser_widget = QWidget()
         file_browser_layout = QVBoxLayout(file_browser_widget)
         file_browser_layout.setContentsMargins(0, 0, 0, 0)
@@ -439,36 +450,51 @@ class MainWindow(QMainWindow):
         lbl_browser.setObjectName("title")
         file_browser_layout.addWidget(lbl_browser)
         
-        # Search box
+        # Caja de búsqueda
         self.search_box = QLineEdit()
-        self.search_box.setPlaceholderText("🔍 Buscar dispositivo (ej: Samsung, Epson...)")
+        self.search_box.setPlaceholderText("Buscar dispositivo (ej: Samsung, Epson...)")
         self.search_box.textChanged.connect(self.filter_files)
         file_browser_layout.addWidget(self.search_box)
+
+        # --- Vista de Árbol con Búsqueda ---
+        self.file_model = QFileSystemModel()
+        self.file_model.setRootPath(os.path.abspath("./IRDB"))
+        self.file_model.setNameFilters(["*.ir"])
+        self.file_model.setNameFilterDisables(False)
         
-        # Results list (custom search results)
-        self.results_list = QListWidget()
-        self.results_list.itemClicked.connect(self.on_search_result_clicked)
-        file_browser_layout.addWidget(self.results_list)
+        self.proxy_model = QSortFilterProxyModel()
+        self.proxy_model.setSourceModel(self.file_model)
+        self.proxy_model.setRecursiveFilteringEnabled(True)
+        self.proxy_model.setFilterCaseSensitivity(Qt.CaseSensitivity.CaseInsensitive)
         
-        # Show initial files
-        self.filter_files("")
+        self.tree_view = QTreeView()
+        self.tree_view.setModel(self.proxy_model)
+        self.tree_view.setRootIndex(self.proxy_model.mapFromSource(self.file_model.index(os.path.abspath("./IRDB"))))
+        
+        # Ocultar columnas excepto Nombre
+        self.tree_view.setHeaderHidden(True)
+        for i in range(1, 4):
+            self.tree_view.setColumnHidden(i, True)
+            
+        self.tree_view.clicked.connect(self.on_tree_clicked)
+        file_browser_layout.addWidget(self.tree_view)
         
         splitter.addWidget(file_browser_widget)
 
-        # --- Middle: Video Feed ---
+        # --- Medio: Feed de Video ---
         video_widget = QWidget()
         video_layout = QVBoxLayout(video_widget)
         video_layout.setContentsMargins(0, 0, 0, 0)
         video_layout.setSpacing(10)
         
-        # Connection status
+        # Estado de conexión
         self.status_label = QLabel("Conectando...")
         self.status_label.setObjectName("title")
         video_layout.addWidget(self.status_label)
         
         self.image_label = QLabel(self)
         self.image_label.setMinimumSize(640, 480)
-        self.image_label.setText("📷 Iniciando Cámara...")
+        self.image_label.setText("Iniciando Cámara...")
         self.image_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.image_label.setStyleSheet("background-color: #16213e; border-radius: 12px;")
         video_layout.addWidget(self.image_label)
@@ -481,7 +507,7 @@ class MainWindow(QMainWindow):
         
         splitter.addWidget(video_widget)
 
-        # --- Right Side: IR Commands Table ---
+        # --- Lado Derecho: Tabla de Comandos IR ---
         commands_widget = QWidget()
         commands_layout = QVBoxLayout(commands_widget)
         commands_layout.setContentsMargins(0, 0, 0, 0)
@@ -501,10 +527,10 @@ class MainWindow(QMainWindow):
         
         splitter.addWidget(commands_widget)
 
-        # Set initial sizes for splitter
+        # Establecer tamaños iniciales del separador
         splitter.setSizes([300, 600, 350])
 
-        # Start Video Thread
+        # Iniciar Hilo de Video
         self.thread = VideoThread()
         self.thread.change_pixmap_signal.connect(self.update_image)
         self.thread.gesture_signal.connect(self.on_gesture_detected)
@@ -512,54 +538,27 @@ class MainWindow(QMainWindow):
         self.thread.connection_status_signal.connect(self.on_connection_status)
         self.thread.start()
 
-    def scan_ir_files(self):
-        """Scan all .ir files recursively in IRDB"""
-        irdb_path = os.path.abspath("./IRDB")
-        self.all_ir_files = []
-        
-        for root, dirs, files in os.walk(irdb_path):
-            # Skip hidden directories
-            dirs[:] = [d for d in dirs if not d.startswith('.')]
-            
-            for file in files:
-                if file.endswith('.ir'):
-                    full_path = os.path.join(root, file)
-                    rel_path = os.path.relpath(full_path, irdb_path)
-                    # Store as (display_name, full_path, relative_path)
-                    display = rel_path.replace('/', ' → ').replace('.ir', '')
-                    self.all_ir_files.append((display, full_path, rel_path))
-
     def filter_files(self, text):
-        """Filter and show matching IR files"""
-        self.results_list.clear()
-        text_lower = text.lower()
-        
-        matches = []
-        for display, full_path, rel_path in self.all_ir_files:
-            if text_lower in rel_path.lower():
-                matches.append((display, full_path))
-        
-        # Limit to 100 results to keep UI responsive
-        for display, full_path in matches[:100]:
-            item = QListWidgetItem(f" {display}")
-            item.setData(Qt.ItemDataRole.UserRole, full_path)
-            self.results_list.addItem(item)
-        
-        if len(matches) > 100:
-            info_item = QListWidgetItem(f"... y {len(matches) - 100} más")
-            info_item.setFlags(Qt.ItemFlag.NoItemFlags)
-            self.results_list.addItem(info_item)
+        """Filtrar vista de árbol"""
+        self.proxy_model.setFilterFixedString(text)
+        # Expandir todo si se busca
+        if text:
+            self.tree_view.expandAll()
+        else:
+            self.tree_view.collapseAll()
 
-    def on_search_result_clicked(self, item):
-        """Handle click on search result"""
-        file_path = item.data(Qt.ItemDataRole.UserRole)
-        if file_path:
+    def on_tree_clicked(self, index):
+        """Manejar clic en nodo del árbol"""
+        source_index = self.proxy_model.mapToSource(index)
+        file_path = self.file_model.filePath(source_index)
+        
+        if os.path.isfile(file_path) and file_path.endswith('.ir'):
             self.load_ir_file(file_path)
 
     @pyqtSlot(bool)
     def on_connection_status(self, connected):
-        if connected:
-            self.status_label.setText("ESP32 Conectado")
+        if connected and self.thread.ser:
+            self.status_label.setText(f"ESP32 Conectado ({self.thread.ser.port})")
             self.status_label.setStyleSheet("color: #00ff88;")
         else:
             self.status_label.setText("ESP32 No Conectado (Modo Simulación)")
@@ -571,33 +570,33 @@ class MainWindow(QMainWindow):
 
     @pyqtSlot(str)
     def on_serial_response(self, response):
-        """Show ESP32 response in log"""
-        self.gesture_log.append(f"📡 <span style='color:#00d9ff;'>ESP32:</span> {response}")
+        """Mostrar respuesta ESP32 en log"""
+        self.gesture_log.append(f"<span style='color:#00d9ff;'>ESP32:</span> {response}")
         sb = self.gesture_log.verticalScrollBar()
         sb.setValue(sb.maximum())
 
     @pyqtSlot(str)
     def on_gesture_detected(self, gesture_name):
-        """Handle gesture detection and send IR command"""
+        """Manejar detección de gesto y enviar comando IR"""
         if not self.ir_commands:
-            self.gesture_log.append(f"⚠️ <span style='color:#ffaa00;'>{gesture_name}</span> - No hay archivo IR cargado")
+            self.gesture_log.append(f"<span style='color:#ffaa00;'>{gesture_name}</span> - No hay archivo IR cargado")
             return
             
         ir_cmd = self.find_ir_command_for_gesture(gesture_name)
         
         if ir_cmd:
-            # Helper to parse Little Endian hex string from IRDB
+            # Ayudante para analizar cadena hex Little Endian de IRDB
             def parse_ir_hex(hex_str):
                 # "34 12 00 00" -> ["34", "12", "00", "00"]
                 parts = hex_str.strip().split()
-                # Remove trailing "00"s (but keep at least one byte if all are 00)
+                # Eliminar "00"s finales (pero mantener al menos un byte si todo es 00)
                 while len(parts) > 1 and parts[-1] == "00":
                     parts.pop()
-                # Reverse for Big Endian (so "34 12" becomes "1234" -> 0x1234)
+                # Invertir para Big Endian (así "34 12" pasa a ser "1234" -> 0x1234)
                 parts.reverse()
                 return "".join(parts)
 
-            # Build extended command: !PROTOCOLO:ADDRESS:COMMAND
+            # Construir comando extendido: !PROTOCOLO:DIRECCION:COMANDO
             protocol = ir_cmd.get('protocol', 'NEC')
             
             raw_address = ir_cmd.get('address', '00 00 00 00')
@@ -609,15 +608,15 @@ class MainWindow(QMainWindow):
             serial_cmd = f"!{protocol}:{address}:{command}\n"
             self.thread.send_serial_signal.emit(serial_cmd)
             
-            self.gesture_log.append(f"✅ <span style='color:#00ff88;'>{gesture_name}</span> → {ir_cmd['name']}")
+            self.gesture_log.append(f"<span style='color:#00ff88;'>{gesture_name}</span> → {ir_cmd['name']}")
         else:
-            self.gesture_log.append(f"❌ <span style='color:#ff6b6b;'>{gesture_name}</span> - No hay comando asociado")
+            self.gesture_log.append(f"<span style='color:#ff6b6b;'>{gesture_name}</span> - No hay comando asociado")
         
         sb = self.gesture_log.verticalScrollBar()
         sb.setValue(sb.maximum())
 
     def find_ir_command_for_gesture(self, gesture_name):
-        """Find IR command that matches the gesture"""
+        """Encontrar comando IR que coincida con el gesto"""
         possible_names = GESTURE_TO_IR_NAMES.get(gesture_name, [])
         
         for name in possible_names:

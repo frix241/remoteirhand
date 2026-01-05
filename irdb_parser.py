@@ -31,13 +31,6 @@ def parse_ir_file(file_path):
                 key = key.strip()
                 value = value.strip()
                 
-                # If we encounter a 'name' field, it usually starts a new command block
-                # (except for the file header, but usually file header doesn't have 'name' 
-                # in the same way as commands, or we can handle it).
-                # Actually, Flipper IR files have a header section and then repeated sections for buttons.
-                # The header usually has 'Filetype', 'Version'.
-                # Button sections start with 'name'.
-                
                 if key == 'name':
                     if current_command:
                         commands.append(current_command)
